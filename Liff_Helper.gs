@@ -235,3 +235,30 @@ function liff_sendPushMessage(lineUserId, message) {
   // Implementation here...
   return { success: true };
 }
+
+/**
+ * ค้นหาข้อมูลพนักงานจาก LINE User ID
+ * @param {string} lineId - รหัส User ID จาก LINE
+ * @return {object|null} ข้อมูลพนักงาน หรือ null ถ้าไม่พบ
+ */
+function findEmployeeByLineId(lineId) {
+  // ตรวจสอบว่ามี lineId ส่งมาหรือไม่
+  if (!lineId) return null;
+
+  const sheet = getSheet("HR_Employees");
+  const data = sheet.getDataRange().getValues();
+
+  // เริ่มวนลูปที่แถวที่ 2 (index 1) เพื่อข้ามหัวตาราง
+  for (let i = 1; i < data.length; i++) {
+    // ใช้ index [16] เพื่อให้อ่านค่าจากคอลัมน์ Q (LINE ID) ตามโครงสร้างชีตของคุณอ๊อด
+    if (data[i][16] == lineId) { 
+      return {
+        empId: data[i][0],    // คอลัมน์ A: รหัสพนักงาน
+        name: data[i][1],     // คอลัมน์ B: ชื่อ-สกุล
+        role: data[i][2],     // คอลัมน์ C: ตำแหน่ง
+        profilePic: data[i][17] // คอลัมน์ R: รูปโปรไฟล์ (ถ้ามี)
+      };
+    }
+  }
+  return null;
+}
