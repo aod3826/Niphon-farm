@@ -3,7 +3,9 @@ const CONFIG = {
   APP_NAME: "Niphon Farm Smart Center",
   TIMEZONE: "Asia/Bangkok",
   LOCATION: { LAT: 7.6266950, LNG: 100.0030960 },
-  MAX_DIST_METERS: 1000000, 
+  MAX_DIST_METERS: 1000000,
+LIFF_ID: PropertiesService.getScriptProperties().getProperty('LIFF_ID') || "ใส่-LIFF-ID-ที่นี่",
+  BOT_NAME: "Niphon Farm Bot"
 
   DB: {
     // --- 👤 HR SYSTEM (เพิ่มคอลัมน์ให้ครบ) ---
