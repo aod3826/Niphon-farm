@@ -9,6 +9,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.13.3/dist/cdn.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
@@ -552,22 +553,105 @@
                 regForm: { id:'', name:'', phone:'', line:'', address:'', position:'', bank:'', acc_no:'', pin:'', pass:'' },
 
                 // --- 1. INITIALIZATION ---
-                initApp() {
+                async initApp() {
                     // รับค่า URL จาก Controller.gs
                     this.appUrl = "<?= appUrl ?>";
-                    
+
+                    // เริ่ม LIFF ก่อนทุกอย่าง
+                    await this.initLIFF();
+
                     // Start Clock
-                    setInterval(() => { 
-                        const now = new Date(); 
-                        this.currentTime = now.toLocaleTimeString('th-TH'); 
-                        this.currentDate = now.toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric'}); 
+                    setInterval(() => {
+                        const now = new Date();
+                        this.currentTime = now.toLocaleTimeString('th-TH');
+                        this.currentDate = now.toLocaleDateString('th-TH', { weekday:'long', day:'numeric', month:'long', year:'numeric'});
                     }, 1000);
 
                     // Load Dashboard Data
                     this.safeRun('main_getGlobalStats', d => this.stats = d);
-                    this.safeRun('main_getWeatherUpdate', d => { 
-                        if(d.success) this.weatherWidget = `<div class="bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-100 flex items-center gap-2 text-sm text-gray-600"><span class="text-2xl">${d.icon}</span> <span class="font-bold">${d.temp}°C</span></div>`; 
+                    this.safeRun('main_getWeatherUpdate', d => {
+                        if(d.success) this.weatherWidget = `<div class="bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-100 flex items-center gap-2 text-sm text-gray-600"><span class="text-2xl">${d.icon}</span> <span class="font-bold">${d.temp}°C</span></div>`;
                     });
+                },
+
+                // --- LIFF SYSTEM ---
+                async initLIFF() {
+                    // ตั้งค่า LIFF ID ของคุณที่นี่ (จะต้องสร้างใน LINE Developers Console)
+                    const LIFF_ID = '2006503286-KPxRrnJ8'; // เปลี่ยนเป็น LIFF ID จริงของคุณ
+
+                    try {
+                        this.loadingText = 'เชื่อมต่อกับ LINE...';
+                        this.loading = true;
+
+                        await liff.init({ liffId: LIFF_ID });
+
+                        // ตรวจสอบว่าอยู่ใน LINE หรือไม่
+                        if (liff.isInClient()) {
+                            console.log('Running in LINE app');
+                        } else {
+                            console.log('Running in external browser');
+                        }
+
+                        // ตรวจสอบว่า Login แล้วหรือยัง
+                        if (liff.isLoggedIn()) {
+                            await this.handleLINELogin();
+                        } else {
+                            // ถ้ายังไม่ login และอยู่ใน LINE ให้ login อัตโนมัติ
+                            if (liff.isInClient()) {
+                                liff.login();
+                            }
+                        }
+
+                        this.loading = false;
+                    } catch (err) {
+                        console.error('LIFF init error:', err);
+                        this.loading = false;
+                        // ถ้า LIFF fail ให้ใช้ระบบ PIN ปกติ
+                    }
+                },
+
+                async handleLINELogin() {
+                    try {
+                        // ดึงข้อมูลโปรไฟล์จาก LINE
+                        const profile = await liff.getProfile();
+
+                        // Map ข้อมูล LINE เป็นข้อมูล User ของระบบ
+                        this.user = {
+                            id: profile.userId,
+                            name: profile.displayName,
+                            avatar: profile.pictureUrl || 'https://ui-avatars.com/api/?name=' + profile.displayName,
+                            position: 'พนักงาน (LINE)',
+                            role: 'staff',
+                            isLINEUser: true
+                        };
+
+                        // แจ้งเตือนยินดีต้อนรับ
+                        const Toast = Swal.mixin({
+                            toast: true,
+                            position: 'top',
+                            showConfirmButton: false,
+                            timer: 3000,
+                            timerProgressBar: true
+                        });
+                        Toast.fire({
+                            icon: 'success',
+                            title: 'ยินดีต้อนรับ ' + profile.displayName
+                        });
+
+                        // โหลดข้อมูลเพิ่มเติมถ้าเป็น Manager
+                        // (คุณสามารถเชื่อม LINE ID กับ EMP-ID ในฐานข้อมูลได้)
+
+                    } catch (err) {
+                        console.error('Get LINE profile error:', err);
+                    }
+                },
+
+                // LINE Logout
+                logoutLINE() {
+                    if (liff.isLoggedIn()) {
+                        liff.logout();
+                        window.location.reload();
+                    }
                 },
 
                 // --- 2. ROUTING ---
@@ -675,7 +759,15 @@
                 // --- 5. LOGOUT & UTILS ---
                 logout() {
                     Swal.fire({ title:'ออกจากระบบ?', icon:'question', showCancelButton:true, confirmButtonColor:'#ef4444' }).then(r => {
-                        if(r.isConfirmed) { this.user = null; this.nav('home'); }
+                        if(r.isConfirmed) {
+                            // ตรวจสอบว่าเป็น LINE User หรือไม่
+                            if (this.user && this.user.isLINEUser && typeof liff !== 'undefined' && liff.isLoggedIn()) {
+                                this.logoutLINE();
+                            } else {
+                                this.user = null;
+                                this.nav('home');
+                            }
+                        }
                     });
                 },
 
